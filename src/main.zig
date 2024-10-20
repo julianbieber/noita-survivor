@@ -7,21 +7,24 @@ const c = @cImport({
 
 const assert = @import("std").debug.assert;
 
+fn glfwErrorCallback(_: c_int, message: [*c]const u8) callconv(.C) void {
+    std.debug.print("Error in callbakc {s}\n", .{message});
+}
+
 pub fn main() !void {
-    if (c.glfwInit() != 0) {
+    _ = c.glfwSetErrorCallback(glfwErrorCallback);
+    const errorCode = c.glfwInit();
+    if (errorCode != 1) {
+        std.debug.print("Error code: {!}\n", .{errorCode});
         return error.InitFailed;
     }
     defer c.glfwTerminate();
-    const window = c.glfwCreateWindow(1920, 1200, "Hello World", null, null);
-    var w: *c.struct_GLFWwindow = null;
-    if (window) |wi| {
-        c.glfwMakeContextCurrent(wi);
-        w = wi;
-    } else {
-        return error.WindowNotCreated;
-    }
+    const window = c.glfwCreateWindow(1920, 1200, "Hello World", null, null).?;
+    defer c.glfwDestroyWindow(window);
+    c.glfwMakeContextCurrent(window);
+    defer c.glfwMakeContextCurrent(null);
 
-    while (c.glfwWindowShouldClose(w)) {}
+    while (c.glfwWindowShouldClose(window) != 1) {}
 }
 // pub fn main() !void {
 //     const window = glfw.Window.create(640, 480, "Triangle!", null, null, .{
