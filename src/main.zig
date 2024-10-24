@@ -17,22 +17,9 @@ fn frameBufferCallback(_: ?*c.GLFWwindow, width: i32, height: i32) callconv(.C) 
 
 var procs: gl.ProcTable = undefined;
 
-const vertexShaderSource =
-    \\ #version 410 core
-    \\ layout (location = 0) in vec3 aPos;
-    \\ void main()
-    \\ {
-    \\   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-    \\ }
-;
+const vertexShaderSource = @embedFile("shaders/triangle.vert");
 
-const fragmentShaderSource =
-    \\ #version 410 core
-    \\ out vec4 FragColor;
-    \\ void main() {
-    \\  FragColor = vec4(1.0, 1.0, 0.2, 1.0);   
-    \\ }
-;
+const fragmentShaderSource = @embedFile("shaders/triangle.frag");
 
 pub fn main() !void {
     _ = c.glfwSetErrorCallback(glfwErrorCallback);
@@ -67,11 +54,11 @@ pub fn main() !void {
     var VBO: c_uint = undefined;
     var VAO: c_uint = undefined;
 
-    gl.GenVertexArrays(1, &VAO);
-    defer gl.DeleteVertexArrays(1, &VAO);
+    gl.GenVertexArrays(1, @ptrCast(&VAO));
+    defer gl.DeleteVertexArrays(1, @ptrCast(&VAO));
 
-    gl.GenBuffers(1, &VBO);
-    defer gl.DeleteBuffers(1, &VBO);
+    gl.GenBuffers(1, @ptrCast(&VBO));
+    defer gl.DeleteBuffers(1, @ptrCast(&VBO));
 
     // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
     gl.BindVertexArray(VAO);
@@ -80,17 +67,23 @@ pub fn main() !void {
     gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * vertices.len, &vertices, gl.STATIC_DRAW);
 
     // Specify and link our vertext attribute description
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), 0);
     gl.EnableVertexAttribArray(0);
 
+    const startTime = std.time.nanoTimestamp();
     while (c.glfwWindowShouldClose(window) != 1) {
+        const since: i128 = std.time.nanoTimestamp() - startTime;
+        var sinceF: f32 = @floatFromInt(since);
+        sinceF = sinceF / 1000000000.0;
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
         // Activate shaderProgram
         gl.UseProgram(triangle.program);
+        gl.Uniform1f(triangle.timeUniform, sinceF);
         gl.BindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
-        gl.DrawArrays(gl.TRIANGLES, 0, 3);
+        gl.DrawArraysInstanced(gl.TRIANGLES, 0, 3, 600);
+        // gl.DrawArrays(gl.TRIANGLES, 0, 3);
 
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
@@ -101,6 +94,7 @@ const Renderable = struct {
     vertexShader: c_uint,
     fragmentShader: c_uint,
     program: c_uint,
+    timeUniform: c_int, // TODO replace with hashmap
 
     fn init(vertexShader: []const u8, fragmentShader: []const u8) !Renderable {
         const v = try compileShader(vertexShader, gl.VERTEX_SHADER);
@@ -110,6 +104,7 @@ const Renderable = struct {
         gl.AttachShader(p, v);
         gl.AttachShader(p, f);
         gl.LinkProgram(p);
+        const timeUniform = gl.GetUniformLocation(p, "time");
 
         var success: c_int = undefined;
         gl.GetProgramiv(p, gl.LINK_STATUS, &success);
@@ -126,6 +121,7 @@ const Renderable = struct {
             .vertexShader = v,
             .fragmentShader = f,
             .program = p,
+            .timeUniform = timeUniform,
         };
     }
 
