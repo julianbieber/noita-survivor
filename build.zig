@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     });
     const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
         .api = .gl,
-        .version = .@"4.1",
+        .version = .@"4.6",
         .profile = .core,
         .extensions = &.{ .ARB_clip_control, .NV_scissor_exclusive },
     });
@@ -45,7 +45,11 @@ pub fn build(b: *std.Build) void {
     // Import the generated module.
     exe.root_module.addImport("gl", gl_bindings);
 
-    exe.linkSystemLibrary("glfw3");
+    if (target.query.os_tag.? == .freebsd) {
+        exe.linkSystemLibrary("glfw");
+    } else if (target.query.os_tag.? == .linux) {
+        exe.linkSystemLibrary("glfw3");
+    }
     exe.linkLibC();
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
