@@ -50,7 +50,7 @@ pub fn main() !void {
     var triangle = try Renderable.init(vertexShaderSource, fragmentShaderSource);
     defer triangle.deinit();
 
-    const vertices = [9]f32{ -0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.0, 0.5, 0.0 };
+    const vertices = [9]f32{ -0.1, -0.1, 0.0, 0.1, -0.1, 0.0, 0.0, 0.1, 0.0 };
     var VBO: c_uint = undefined;
     var VAO: c_uint = undefined;
 
