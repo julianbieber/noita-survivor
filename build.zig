@@ -45,9 +45,9 @@ pub fn build(b: *std.Build) void {
     // Import the generated module.
     exe.root_module.addImport("gl", gl_bindings);
 
-    if (target.query.os_tag.? == .freebsd) {
+    if (target.result.os.tag == std.Target.Os.Tag.freebsd) {
         exe.linkSystemLibrary("glfw");
-    } else if (target.query.os_tag.? == .linux) {
+    } else if (target.result.os.tag == std.Target.Os.Tag.linux) {
         exe.linkSystemLibrary("glfw3");
     }
     exe.linkLibC();
