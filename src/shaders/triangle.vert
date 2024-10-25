@@ -1,5 +1,6 @@
 #version 460 core
 out flat int instanceId;
+out vec3 pos;
 layout (location = 0) in vec3 aPos;
 uniform float time;
 
@@ -23,4 +24,5 @@ void main() {
     float y = aPos.y - pow(fract(time * instanceOffset) * 3.0- 1, 2.0) * 0.2 +0.5;
     // y = aPos.y;
     gl_Position = vec4(x, y, aPos.z, 1.0);
+    pos = vec3(x, y, aPos.z) * hash(vec2(instanceId)).x;
 }
