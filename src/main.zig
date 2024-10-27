@@ -1,6 +1,8 @@
 const std = @import("std");
 const gl = @import("gl");
 
+const player = @import("player.zig");
+
 const c = @cImport({
     @cInclude("GLFW/glfw3.h");
 });
@@ -52,6 +54,8 @@ pub fn main() !void {
     const vertices = [9]f32{ -0.1, -0.1, 0.0, 0.1, -0.1, 0.0, 0.0, 0.1, 0.0 };
     var triangle = try Renderable.init(vertexShaderSource, fragmentShaderSource, &vertices);
     defer triangle.deinit();
+
+    _ = c.glfwSetKeyCallback(window, player.keyboardCallback);
 
     const startTime = std.time.nanoTimestamp();
     while (c.glfwWindowShouldClose(window) != 1) {
