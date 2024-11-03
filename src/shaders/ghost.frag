@@ -201,6 +201,4 @@ void main(){
     vec3 ray_direction = normalize(vec3(pixel_position, 1.0)); 
 
     FragColor = render(vec3(0.0, 0.0, 0.0), ray_direction);
-    // out_color = vec4(pixel_position, 0.0, 1.0);
-    // out_color = vec4(sin(sdFbm(vec3(uv * 40.0, 0.0), 7.0)), 0.0, 0.0, 1.0);
 } 
