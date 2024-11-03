@@ -1,5 +1,6 @@
 const std = @import("std");
 const gl = @import("gl");
+const World = @import("world.zig").World;
 
 const player = @import("player.zig");
 
@@ -20,10 +21,6 @@ fn frameBufferCallback(_: ?*c.GLFWwindow, width: i32, height: i32) callconv(.C) 
 }
 
 var procs: gl.ProcTable = undefined;
-
-const vertexShaderSource = @embedFile("shaders/triangle.vert");
-
-const fragmentShaderSource = @embedFile("shaders/triangle.frag");
 
 pub fn main() !void {
     _ = c.glfwSetErrorCallback(glfwErrorCallback);
@@ -51,115 +48,27 @@ pub fn main() !void {
     gl.makeProcTableCurrent(&procs);
     defer gl.makeProcTableCurrent(null);
 
-    const vertices = [9]f32{ -0.1, -0.1, 0.0, 0.1, -0.1, 0.0, 0.0, 0.1, 0.0 };
-    var triangle = try Renderable.init(vertexShaderSource, fragmentShaderSource, &vertices);
-    defer triangle.deinit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const deinitstatus = gpa.deinit();
+        if (deinitstatus == .leak) {
+            @panic("Leak detected");
+        }
+    }
+    var world = try World.init(allocator);
+    defer world.deinit();
 
     _ = c.glfwSetKeyCallback(window, player.keyboardCallback);
 
-    const startTime = std.time.nanoTimestamp();
     while (c.glfwWindowShouldClose(window) != 1) {
-        const since: i128 = std.time.nanoTimestamp() - startTime;
-        var sinceF: f32 = @floatFromInt(since);
-        sinceF = sinceF / 1000000000.0;
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
         player.draw();
-
-        triangle.drawInstanced(sinceF);
+        try world.frame();
 
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
     }
-}
-
-const Renderable = struct {
-    vertexShader: c_uint,
-    fragmentShader: c_uint,
-    program: c_uint,
-    timeUniform: c_int, // TODO replace with hashmap
-    vao: c_uint,
-    vbo: c_uint,
-
-    fn init(vertexShader: []const u8, fragmentShader: []const u8, vertices: []const f32) !Renderable {
-        const v = try compileShader(vertexShader, gl.VERTEX_SHADER);
-        const f = try compileShader(fragmentShader, gl.FRAGMENT_SHADER); // TODO deinit vertex shader on error
-
-        const p = gl.CreateProgram();
-        gl.AttachShader(p, v);
-        gl.AttachShader(p, f);
-        gl.LinkProgram(p);
-        const timeUniform = gl.GetUniformLocation(p, "time");
-
-        var success: c_int = undefined;
-        gl.GetProgramiv(p, gl.LINK_STATUS, &success);
-        if (success == 0) {
-            var log: [512]u8 = [_]u8{0} ** 512;
-            var length: c_int = undefined;
-            gl.GetProgramInfoLog(p, log.len, &length, &log);
-            std.debug.print("{s}", .{log});
-            // TODO deinit program and shaders;
-            return error.ProgramLinkError;
-        }
-
-        var VBO: c_uint = undefined;
-        var VAO: c_uint = undefined;
-
-        gl.GenVertexArrays(1, @ptrCast(&VAO));
-
-        gl.GenBuffers(1, @ptrCast(&VBO));
-
-        // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-        gl.BindVertexArray(VAO);
-        gl.BindBuffer(gl.ARRAY_BUFFER, VBO);
-        // Fill our buffer with the vertex data
-        const verticesLen: isize = @intCast(vertices.len);
-        gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * verticesLen, @ptrCast(vertices), gl.STATIC_DRAW);
-
-        // Specify and link our vertext attribute description
-        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), 0);
-        gl.EnableVertexAttribArray(0);
-        return Renderable{
-            .vertexShader = v,
-            .fragmentShader = f,
-            .program = p,
-            .timeUniform = timeUniform,
-            .vao = VAO,
-            .vbo = VBO,
-        };
-    }
-
-    fn drawInstanced(self: *Renderable, time: f32) void {
-        gl.UseProgram(self.program);
-        gl.Uniform1f(self.timeUniform, time);
-        gl.BindVertexArray(self.vao); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
-        gl.DrawArraysInstanced(gl.TRIANGLES, 0, 3, 600);
-    }
-
-    fn deinit(self: *Renderable) void {
-        gl.DeleteVertexArrays(1, @ptrCast(&self.vao));
-        gl.DeleteBuffers(1, @ptrCast(&self.vbo));
-        gl.DeleteShader(self.vertexShader);
-        gl.DeleteShader(self.fragmentShader);
-        gl.DeleteProgram(self.program);
-    }
-};
-
-fn compileShader(source: []const u8, shader_type: c_uint) !c_uint {
-    const shader = gl.CreateShader(shader_type);
-    gl.ShaderSource(shader, 1, @ptrCast(&source), &[_]c_int{@intCast(source.len)});
-    gl.CompileShader(shader);
-    var success: c_int = undefined;
-    gl.GetShaderiv(shader, gl.COMPILE_STATUS, &success);
-    if (success == 0) {
-        var infoLog: [512]u8 = [_]u8{0} ** 512;
-        var length: c_int = undefined;
-        gl.GetShaderInfoLog(shader, infoLog.len, &length, &infoLog);
-        std.debug.print("{s}", .{infoLog});
-        gl.DeleteShader(shader);
-        return error.shaderCompileError;
-    }
-
-    return shader;
 }
