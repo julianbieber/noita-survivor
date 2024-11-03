@@ -1,8 +1,8 @@
 const std = @import("std");
 const gl = @import("gl");
-const World = @import("world.zig").World;
 
-const player = @import("player.zig");
+const World = @import("world.zig").World;
+const Player = @import("player.zig").Player;
 
 const c = @cImport({
     @cInclude("GLFW/glfw3.h");
@@ -59,7 +59,9 @@ pub fn main() !void {
     var world = try World.init(allocator);
     defer world.deinit();
 
-    _ = c.glfwSetKeyCallback(window, player.keyboardCallback);
+    var player = try Player.init();
+
+    _ = c.glfwSetKeyCallback(window, Player.keyboardCallback);
 
     while (c.glfwWindowShouldClose(window) != 1) {
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);
