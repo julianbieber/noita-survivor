@@ -1,8 +1,10 @@
 const std = @import("std");
-const print = std.debug.print;
+const gl = @import("gl");
 const c = @cImport({
     @cInclude("GLFW/glfw3.h");
 });
+
+const print = std.debug.print;
 
 pub const Player = @This();
 
@@ -14,8 +16,9 @@ const Direction = enum {
 };
 
 var direction = Direction.right;
+var position = null;
 
-pub fn keyboardCallback(_: ?*c.GLFWwindow, key: c_int, _: c_int, _: c_int, _: c_int) callconv(.C) void {
+pub fn keyboardCallback(window: ?*c.GLFWwindow, key: c_int, _: c_int, _: c_int, _: c_int) callconv(.C) void {
     switch (key) {
         c.GLFW_KEY_W, c.GLFW_KEY_UP => {
             direction = Direction.up;
@@ -29,8 +32,13 @@ pub fn keyboardCallback(_: ?*c.GLFWwindow, key: c_int, _: c_int, _: c_int, _: c_
         c.GLFW_KEY_D, c.GLFW_KEY_RIGHT => {
             direction = Direction.right;
         },
+        c.GLFW_KEY_ESCAPE => {
+            print("ESC pressed, closing window.\n", .{});
+
+            c.glfwSetWindowShouldClose(window, c.GLFW_TRUE);
+        },
         else => {},
     }
-
-    // print("player direction: {s}\n", .{@tagName(direction)});
 }
+
+pub fn draw() void {}

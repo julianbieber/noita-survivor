@@ -65,6 +65,8 @@ pub fn main() !void {
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
+        player.draw();
+
         triangle.drawInstanced(sinceF);
 
         c.glfwSwapBuffers(window);
