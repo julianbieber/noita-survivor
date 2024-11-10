@@ -1,6 +1,7 @@
 const std = @import("std");
 const gl = @import("gl");
-const World = @import("world.zig").World;
+const world_mod = @import("world.zig");
+const World = world_mod.World;
 
 const player = @import("player.zig");
 
@@ -71,4 +72,8 @@ pub fn main() !void {
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
     }
+}
+
+test {
+    std.testing.refAllDeclsRecursive(@This());
 }
