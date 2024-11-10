@@ -35,7 +35,7 @@ pub fn main() !void {
     c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 6);
     c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
 
-    const window = c.glfwCreateWindow(1920, 1200, "Hello World", null, null).?;
+    const window = c.glfwCreateWindow(1920, 1200, "Hello World", c.glfwGetPrimaryMonitor(), null).?;
     defer c.glfwDestroyWindow(window);
     c.glfwMakeContextCurrent(window);
     defer c.glfwMakeContextCurrent(null);

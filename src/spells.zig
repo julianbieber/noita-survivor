@@ -1,15 +1,7 @@
 const render = @import("render.zig");
 const std = @import("std");
 const math = std.math;
-
-pub const Vec2 = struct {
-    x: f32,
-    y: f32,
-
-    pub fn len(self: Vec2) f32 {
-        return math.sqrt(self.x * self.x + self.y * self.y);
-    }
-};
+const Vec2 = @import("vec.zig").Vec2;
 
 const SpellMovement = struct {
     pos: Vec2,
