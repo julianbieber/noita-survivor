@@ -3,6 +3,7 @@ const render = @import("render.zig");
 const std = @import("std");
 const Vec2 = @import("vec.zig").Vec2;
 const enemy = @import("enemy.zig");
+const spell_craft = @import("spell_craft.zig");
 
 // Structure for systems: if it requires multiple different entities, place the system in the world, otherwise place it directly in the entity
 
@@ -27,6 +28,7 @@ pub const World = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !World {
+        _ = try spell_craft.SpellTree.init(spell_craft.Spells.pumpkin, allocator);
         const pumpkins = try spells.PumpkinSpell.init(allocator);
         const pumpkin_program = try render.RenderProgram.init(render.pumpkin_vertex, render.pumpkin_fragment);
         const pumpkin_effect = try render.RenderableEffect.init(allocator);
