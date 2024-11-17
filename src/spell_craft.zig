@@ -47,14 +47,14 @@ pub const SpellTree = struct {
         return false;
     }
 
-    pub fn to_eval(self: *const SpellTree) !SpellEval {
+    pub fn to_eval(self: *const SpellTree) !SpellEval { // TODO not sure how to represent the result of the spell tree (mayebe array with one entry per leaf?)
         var total_time: f32 = 0.0;
-        var casts = std.ArrayList(Projectiles).init();
     }
 
-    fn to_eval_rec(self: *const SpellTree, casts: *std.ArrayList(Projectiles), total_time: *f32) !void {
+    fn to_eval_rec(self: *const SpellTree, casts: *SpellEval) !void {
         const meta = meta_for_spell(self.spell);
-        total_time.* += meta.cast_time;
+        casts.cast_time += meta.cast_time;
+        casts.remaining += meta.cast_time;
         switch (self.spell) {
             .multi_cast => |c| {
                 return;
@@ -64,8 +64,6 @@ pub const SpellTree = struct {
 };
 
 pub const SpellTags = enum { multi_cast, pumpkin };
-pub const ProjectileTags = enum { pumpkin };
-pub const Projectiles = union(ProjectileTags) { pumpkin: u32 };
 
 fn meta_for_spell(spell: Spells) SpellMeta {
     switch (spell) {
@@ -89,17 +87,7 @@ pub const Spells = union(SpellTags) { multi_cast: u8, pumpkin: void };
 pub const SpellEval = struct {
     cast_time: f32,
     remaining: f32,
-    casts: std.ArrayList(Projectiles),
-
-    fn add_projectile(self: *SpellEval, p: Projectiles) !void {
-        for (self.casts.items) |*c| {
-            if (c.*.pumpkin)
-        }
-    }
-
-    pub fn deinit(self: *SpellEval) void {
-        self.casts.deinit();
-    }
+    pumpkins: u32,
 };
 
 const testing = std.testing;
