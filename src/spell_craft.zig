@@ -47,18 +47,21 @@ pub const SpellTree = struct {
         return false;
     }
 
-    pub fn to_eval(self: *const SpellTree) !SpellEval { // TODO not sure how to represent the result of the spell tree (mayebe array with one entry per leaf?)
-        var total_time: f32 = 0.0;
+    pub fn to_eval(self: *const SpellTree) !std.ArrayList(SpellEval) { // TODO not sure how to represent the result of the spell tree (mayebe array with one entry per leaf?)
+        const initial = SpellEval{ .cast_time = 0.0, .remainin = 0.0, .projectiles = 0 };
+
+        var r = std.ArrayList(SpellEval).init(self.allocator);
+        try self.to_eval_rec(initial, &r);
     }
 
-    fn to_eval_rec(self: *const SpellTree, casts: *SpellEval) !void {
-        const meta = meta_for_spell(self.spell);
-        casts.cast_time += meta.cast_time;
-        casts.remaining += meta.cast_time;
-        switch (self.spell) {
-            .multi_cast => |c| {
-                return;
-            },
+    fn to_eval_rec(self: *const SpellTree, current: SpellEval, finished: *std.ArrayList(SpellEval)) !void {
+        const this_level = current.add_spell(self.spell);
+        if (self.children.items.len == 0) {
+            try finished.append(this_level);
+        } else {
+            for (self.children.items) |child| {
+                try child.to_eval_rec(this_level, finished);
+            }
         }
     }
 };
@@ -87,7 +90,19 @@ pub const Spells = union(SpellTags) { multi_cast: u8, pumpkin: void };
 pub const SpellEval = struct {
     cast_time: f32,
     remaining: f32,
-    pumpkins: u32,
+    projectiles: u32,
+
+    fn add_spell(self: SpellEval, spell: Spells) SpellEval {
+        const meta = meta_for_spell(spell);
+        switch (spell) {
+            .multi_cast => |n| {
+                return SpellEval{ .cast_time = self.cast_time + meta.cast_time, .remaining = self.remaining, .projectiles = self.projectiles + n }; // maybe add a fucntion that lowers the impact of further casts on the cast time formula
+            },
+            .pumpkin => |_| {
+                return SpellEval{ .cast_time = self.cast_time + meta.cast_time, .remaining = self.remaining, .projectiles = self.projectiles + 1 };
+            },
+        }
+    }
 };
 
 const testing = std.testing;
