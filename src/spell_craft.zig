@@ -48,10 +48,11 @@ pub const SpellTree = struct {
     }
 
     pub fn to_eval(self: *const SpellTree) !std.ArrayList(SpellEval) { // TODO not sure how to represent the result of the spell tree (mayebe array with one entry per leaf?)
-        const initial = SpellEval{ .cast_time = 0.0, .remainin = 0.0, .projectiles = 0 };
+        const initial = SpellEval{ .cast_time = 0.0, .remaining = 0.0, .projectiles = 0 };
 
         var r = std.ArrayList(SpellEval).init(self.allocator);
         try self.to_eval_rec(initial, &r);
+        return r;
     }
 
     fn to_eval_rec(self: *const SpellTree, current: SpellEval, finished: *std.ArrayList(SpellEval)) !void {
@@ -127,4 +128,19 @@ test "instantiate and free" {
         const added = try tree.add(Spells.pumpkin);
         try testing.expect(!added);
     }
+}
+
+test "evaluate tree" {
+    const allocator = testing.allocator;
+
+    var tree = try SpellTree.init(Spells{ .multi_cast = 1 }, allocator);
+    defer tree.deinit();
+    for (0..4) |_| {
+        _ = try tree.add(Spells{ .multi_cast = 1 });
+    }
+    _ = try tree.add(Spells.pumpkin);
+    const eval = try tree.to_eval();
+    defer eval.deinit();
+
+    try testing.expect(eval.items.len == 1);
 }
