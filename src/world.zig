@@ -21,6 +21,9 @@ pub const World = struct {
     duration_since_second: i64,
 
     player_position: Vec2,
+    player_spell_tree: spell_craft.SpellTree,
+    player_current_spell: std.ArrayList(spell_craft.SpellEval),
+
     rand: std.Random,
     prng: std.rand.Xoshiro256,
     time_delta_seconds: f32,
@@ -28,7 +31,6 @@ pub const World = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !World {
-        _ = try spell_craft.SpellTree.init(spell_craft.Spells.pumpkin, allocator);
         const pumpkins = try spells.PumpkinSpell.init(allocator);
         const pumpkin_program = try render.RenderProgram.init(render.pumpkin_vertex, render.pumpkin_fragment);
         const pumpkin_effect = try render.RenderableEffect.init(allocator);
@@ -43,6 +45,19 @@ pub const World = struct {
             break :blk seed;
         });
         const rand = prng.random();
+
+        var tree = try spell_craft.SpellTree.init(spell_craft.Spells{ .multi_cast = 5 }, allocator);
+        for (0..4) |_| {
+            const added = try tree.add(spell_craft.Spells{ .multi_cast = 2 });
+            if (!added) {
+                return error.FailedToAddSpell;
+            }
+        }
+        const added = try tree.add(spell_craft.Spells.pumpkin);
+        if (!added) {
+            return error.FailedToAddSpell;
+        }
+        const current_spell = try tree.to_eval();
 
         return World{
             .pumpkins = pumpkins,
@@ -62,6 +77,9 @@ pub const World = struct {
             .prng = prng,
             .time_delta_seconds = 0.0,
 
+            .player_spell_tree = tree,
+            .player_current_spell = current_spell,
+
             .allocator = allocator,
         };
     }
@@ -74,6 +92,9 @@ pub const World = struct {
         self.ghosts.deinit();
         self.ghost_program.deinit();
         self.ghost_effect.deinit();
+
+        self.player_spell_tree.deinit();
+        self.player_current_spell.deinit();
     }
 
     pub fn frame(self: *World) !void {
@@ -85,12 +106,14 @@ pub const World = struct {
 
         self.player_position = Vec2{ .x = 0.0, .y = 0.0 };
 
-        self.pumpkins.spells_system(self.player_position, self.time_delta_seconds);
+        try self.eval_spells_system();
+
+        self.pumpkins.simulate(self.time_delta_seconds);
 
         try self.ghosts.enemies_system(self.player_position, self.time_delta_seconds);
         self.spell_hit_system();
         self.ghosts.remove_dead_enemies();
-        self.pumpkins.remove_spent_spells();
+        self.pumpkins.remove_spent_spells(self.time_delta_seconds);
 
         self.pumpkin_effect.clear();
         for (self.pumpkins.positions.items) |pos| {
@@ -106,6 +129,22 @@ pub const World = struct {
         }
         self.ghost_effect.renderInstanced(&self.ghost_program);
 
+        self.fps_system(last_frame_duration);
+    }
+
+    fn eval_spells_system(self: *World) !void {
+        for (self.player_current_spell.items) |*spell| {
+            const cast = spell.advance_time(self.time_delta_seconds);
+            if (cast) {
+                std.debug.print("{d}projectiles\n", .{spell.projectiles});
+                for (0..spell.projectiles) |_| {
+                    try self.pumpkins.add(self.player_position);
+                }
+            }
+        }
+    }
+
+    fn fps_system(self: *World, last_frame_duration: i64) void {
         self.duration_since_second += last_frame_duration;
         if (self.duration_since_second >= 1000) {
             std.debug.print("{d}FPS\n", .{self.frames_since_second});

@@ -73,10 +73,10 @@ fn meta_for_spell(spell: Spells) SpellMeta {
     switch (spell) {
         .multi_cast => |n| {
             const n_f: f32 = @floatFromInt(n);
-            return SpellMeta{ .max_children = 1, .cast_time = 0.1 * n_f }; // maybe add a fucntion that lowers the impact of further casts on the cast time formula
+            return SpellMeta{ .max_children = 1, .cast_time = 0.01 * n_f }; // maybe add a fucntion that lowers the impact of further casts on the cast time formula
         },
         .pumpkin => |_| {
-            return SpellMeta{ .max_children = 0, .cast_time = 0.5 };
+            return SpellMeta{ .max_children = 0, .cast_time = 0.3 };
         },
     }
 }
@@ -97,11 +97,27 @@ pub const SpellEval = struct {
         const meta = meta_for_spell(spell);
         switch (spell) {
             .multi_cast => |n| {
-                return SpellEval{ .cast_time = self.cast_time + meta.cast_time, .remaining = self.remaining, .projectiles = self.projectiles + n }; // maybe add a fucntion that lowers the impact of further casts on the cast time formula
+                var count: u32 = 0;
+                if (self.projectiles == 0) {
+                    count = n;
+                } else {
+                    count = self.projectiles * n;
+                }
+                return SpellEval{ .cast_time = self.cast_time + meta.cast_time, .remaining = self.remaining, .projectiles = count }; // maybe add a fucntion that lowers the impact of further casts on the cast time formula
             },
             .pumpkin => |_| {
                 return SpellEval{ .cast_time = self.cast_time + meta.cast_time, .remaining = self.remaining, .projectiles = self.projectiles + 1 };
             },
+        }
+    }
+
+    pub fn advance_time(self: *SpellEval, delta_time: f32) bool {
+        self.remaining -= delta_time;
+        if (self.remaining < 0.0) {
+            self.remaining = self.cast_time; // Does not handel multiple casts in a single frame
+            return true;
+        } else {
+            return false;
         }
     }
 };
