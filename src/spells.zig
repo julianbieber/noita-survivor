@@ -71,3 +71,52 @@ pub const PumpkinSpell = struct {
         self.current_angle += 0.1;
     }
 };
+
+pub const ExplosionSpell = struct {
+    positions: std.ArrayList(Vec2),
+    damage: std.ArrayList(f32),
+    max_size: std.ArrayList(f32),
+    remaining_duration: std.ArrayList(f32),
+
+    pub fn init(allocator: std.mem.Allocator) ExplosionSpell {
+        const positions = std.ArrayList(Vec2).init(allocator);
+
+        const damage = std.ArrayList(f32).init(allocator);
+        const max_size = std.ArrayList(f32).init(allocator);
+        const remaining_duration = std.ArrayList(f32).init(allocator);
+
+        return ExplosionSpell{
+            .positions = positions,
+            .damage = damage,
+            .remaining_duration = remaining_duration,
+            .max_size = max_size,
+        };
+    }
+
+    pub fn deinit(self: *ExplosionSpell) void {
+        self.positions.deinit();
+        self.damage.deinit();
+        self.remaining_duration.deinit();
+    }
+
+    pub fn remove_spent(self: *ExplosionSpell, time_delta: f32) void {
+        var i = self.remaining_duration.items.len;
+        while (i > 0) {
+            i -= 1;
+            self.remaining_duration.items[i] -= time_delta;
+            const r = self.remaining_duration.items[i];
+            if (r < 0.0) {
+                _ = self.positions.orderedRemove(i);
+                _ = self.damage.orderedRemove(i);
+                _ = self.remaining_duration.orderedRemove(i);
+            }
+        }
+    }
+
+    pub fn add(self: *ExplosionSpell, position: Vec2) !void {
+        try self.positions.append(position);
+        try self.damage.append(1.0);
+        try self.max_size.append(1.0);
+        try self.remaining_duration.append(1.0);
+    }
+};

@@ -16,6 +16,10 @@ pub const World = struct {
     ghost_program: render.RenderProgram,
     ghost_effect: render.RenderableEffect,
 
+    explosions: spells.ExplosionSpell,
+    explosion_program: render.RenderProgram,
+    explosion_effect: render.RenderableEffect,
+
     last_frame_start: i64,
     frames_since_second: i32,
     duration_since_second: i64,
@@ -33,11 +37,22 @@ pub const World = struct {
     pub fn init(allocator: std.mem.Allocator) !World {
         const pumpkins = try spells.PumpkinSpell.init(allocator);
         const pumpkin_program = try render.RenderProgram.init(render.pumpkin_vertex, render.pumpkin_fragment);
-        const pumpkin_effect = try render.RenderableEffect.init(allocator);
+        const pumpkin_buffer_descriptr = render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 };
+        const pumpkin_effect = try render.RenderableEffect.init(allocator, &[_]render.BufferDescriptor{pumpkin_buffer_descriptr});
 
         const ghosts = try enemy.Ghost.init(allocator);
         const ghost_program = try render.RenderProgram.init(render.ghost_vertex, render.ghost_fragment);
-        const ghost_effect = try render.RenderableEffect.init(allocator);
+        const ghost_buffer_descriptor = render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 };
+        const ghost_effect = try render.RenderableEffect.init(allocator, &[_]render.BufferDescriptor{ghost_buffer_descriptor});
+
+        const explosions = spells.ExplosionSpell.init(allocator);
+        const explosions_program = try render.RenderProgram.init(render.explosion_vertex, render.explosion_fragment);
+        const explosion_buffer_descriptors = [_]render.BufferDescriptor{
+            render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }, // positions
+            render.BufferDescriptor{ .size_per_element = 1, .stride = @sizeOf(f32) }, // max_size
+            render.BufferDescriptor{ .size_per_element = 1, .stride = @sizeOf(f32) }, // remaining_duration
+        };
+        const explosions_effect = try render.RenderableEffect.init_cube(allocator, &explosion_buffer_descriptors);
 
         var prng = std.rand.DefaultPrng.init(blk: {
             var seed: u64 = undefined;
@@ -67,6 +82,10 @@ pub const World = struct {
             .ghosts = ghosts,
             .ghost_program = ghost_program,
             .ghost_effect = ghost_effect,
+
+            .explosions = explosions,
+            .explosion_program = explosions_program,
+            .explosion_effect = explosions_effect,
 
             .last_frame_start = std.time.milliTimestamp(),
             .frames_since_second = 0,
@@ -118,14 +137,14 @@ pub const World = struct {
         self.pumpkin_effect.clear();
         for (self.pumpkins.positions.items) |pos| {
             if (pos.len() < 2.0) // culling should take player position into account
-                try self.pumpkin_effect.add(pos.x, pos.y);
+                try self.pumpkin_effect.add(0, &[_]f32{ pos.x, pos.y });
         }
         self.pumpkin_effect.renderInstanced(&self.pumpkin_program);
 
         self.ghost_effect.clear();
         for (self.ghosts.positions.items) |pos| {
             // if (pos.len() < 2.0)
-            try self.ghost_effect.add(pos.x, pos.y);
+            try self.ghost_effect.add(0, &[_]f32{ pos.x, pos.y });
         }
         self.ghost_effect.renderInstanced(&self.ghost_program);
 
