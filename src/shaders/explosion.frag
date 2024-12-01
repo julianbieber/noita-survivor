@@ -8,5 +8,9 @@ out vec4 FragColor;
 
 
 void main(){
-    FragColor = vec4(uv, duration, 0.0);
+    if (length((uv - vec2(0.5, 0.5))) < duration / 10.0) {
+        FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    } else{
+        FragColor = vec4(0.0);
+    }
 }

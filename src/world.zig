@@ -45,7 +45,7 @@ pub const World = struct {
         const ghost_buffer_descriptor = render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 };
         const ghost_effect = try render.RenderableEffect.init(allocator, &[_]render.BufferDescriptor{ghost_buffer_descriptor});
 
-        const explosions = spells.ExplosionSpell.init(allocator);
+        var explosions = spells.ExplosionSpell.init(allocator);
         const explosions_program = try render.RenderProgram.init(render.explosion_vertex, render.explosion_fragment);
         const explosion_buffer_descriptors = [_]render.BufferDescriptor{
             render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }, // positions
@@ -53,6 +53,8 @@ pub const World = struct {
             render.BufferDescriptor{ .size_per_element = 1, .stride = @sizeOf(f32) }, // remaining_duration
         };
         const explosions_effect = try render.RenderableEffect.init_cube(allocator, &explosion_buffer_descriptors);
+
+        try explosions.add(Vec2{ .x = 0.0, .y = 0.0 }); // replace with the spell system later
 
         var prng = std.rand.DefaultPrng.init(blk: {
             var seed: u64 = undefined;
@@ -108,6 +110,10 @@ pub const World = struct {
         self.pumpkin_program.deinit();
         self.pumpkin_effect.deinit();
 
+        self.explosions.deinit();
+        self.explosion_program.deinit();
+        self.explosion_effect.deinit();
+
         self.ghosts.deinit();
         self.ghost_program.deinit();
         self.ghost_effect.deinit();
@@ -126,7 +132,6 @@ pub const World = struct {
         self.player_position = Vec2{ .x = 0.0, .y = 0.0 };
 
         try self.eval_spells_system();
-
         self.pumpkins.simulate(self.time_delta_seconds);
 
         try self.ghosts.enemies_system(self.player_position, self.time_delta_seconds);
@@ -134,21 +139,42 @@ pub const World = struct {
         self.ghosts.remove_dead_enemies();
         self.pumpkins.remove_spent_spells(self.time_delta_seconds);
 
-        self.pumpkin_effect.clear();
-        for (self.pumpkins.positions.items) |pos| {
-            if (pos.len() < 2.0) // culling should take player position into account
-                try self.pumpkin_effect.add(0, &[_]f32{ pos.x, pos.y });
-        }
-        self.pumpkin_effect.renderInstanced(&self.pumpkin_program);
+        try self.render_pumpkins();
 
+        try self.render_ghosts();
+
+        try self.render_explosions();
+
+        self.fps_system(last_frame_duration);
+    }
+
+    fn render_ghosts(self: *World) !void {
         self.ghost_effect.clear();
         for (self.ghosts.positions.items) |pos| {
             // if (pos.len() < 2.0)
             try self.ghost_effect.add(0, &[_]f32{ pos.x, pos.y });
         }
-        self.ghost_effect.renderInstanced(&self.ghost_program);
+        self.ghost_effect.render_instanced(&self.ghost_program, 3);
+    }
 
-        self.fps_system(last_frame_duration);
+    fn render_explosions(self: *World) !void {
+        self.explosion_effect.clear();
+        for (self.explosions.positions.items, self.explosions.max_size.items, self.explosions.remaining_duration.items) |pos, size, dur| {
+            // if (pos.len() < 2.0)
+            try self.explosion_effect.add(0, &[_]f32{ pos.x, pos.y });
+            try self.explosion_effect.add(1, &[_]f32{size});
+            try self.explosion_effect.add(2, &[_]f32{dur});
+        }
+        self.explosion_effect.render_instanced(&self.explosion_program, 6);
+    }
+
+    fn render_pumpkins(self: *World) !void {
+        self.pumpkin_effect.clear();
+        for (self.pumpkins.positions.items) |pos| {
+            if (pos.len() < 2.0) // culling should take player position into account
+                try self.pumpkin_effect.add(0, &[_]f32{ pos.x, pos.y });
+        }
+        self.pumpkin_effect.render_instanced(&self.pumpkin_program, 3);
     }
 
     fn eval_spells_system(self: *World) !void {
@@ -180,6 +206,16 @@ pub const World = struct {
                 if (enemy_position.dist(spell_position) < 0.1) {
                     self.pumpkins.remaining_hits.items[spell_i] -= 1;
                     self.ghosts.healths.items[enemey_yi] -= 1;
+                }
+            }
+        }
+
+        for (0..self.explosions.positions.items.len) |explosion_index| {
+            const explosion_effect = self.explosions.get_damage(explosion_index);
+
+            for (self.ghosts.positions.items, 0..) |enemy_position, enemy_i| {
+                if (enemy_position.dist(explosion_effect[1]) < explosion_effect[2]) {
+                    self.ghosts.healths.items[enemy_i] -= explosion_effect[0];
                 }
             }
         }

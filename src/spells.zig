@@ -74,14 +74,14 @@ pub const PumpkinSpell = struct {
 
 pub const ExplosionSpell = struct {
     positions: std.ArrayList(Vec2),
-    damage: std.ArrayList(f32),
+    damage: std.ArrayList(i32),
     max_size: std.ArrayList(f32),
     remaining_duration: std.ArrayList(f32),
 
     pub fn init(allocator: std.mem.Allocator) ExplosionSpell {
         const positions = std.ArrayList(Vec2).init(allocator);
 
-        const damage = std.ArrayList(f32).init(allocator);
+        const damage = std.ArrayList(i32).init(allocator);
         const max_size = std.ArrayList(f32).init(allocator);
         const remaining_duration = std.ArrayList(f32).init(allocator);
 
@@ -105,7 +105,7 @@ pub const ExplosionSpell = struct {
             i -= 1;
             self.remaining_duration.items[i] -= time_delta;
             const r = self.remaining_duration.items[i];
-            if (r < 0.0) {
+            if (r <= 0.0) {
                 _ = self.positions.orderedRemove(i);
                 _ = self.damage.orderedRemove(i);
                 _ = self.remaining_duration.orderedRemove(i);
@@ -115,8 +115,20 @@ pub const ExplosionSpell = struct {
 
     pub fn add(self: *ExplosionSpell, position: Vec2) !void {
         try self.positions.append(position);
-        try self.damage.append(1.0);
+        try self.damage.append(1);
         try self.max_size.append(1.0);
-        try self.remaining_duration.append(1.0);
+        try self.remaining_duration.append(10.0);
+    }
+
+    // returning damgage, center, radius;
+    pub fn get_damage(self: *ExplosionSpell, index: usize) struct { i32, Vec2, f32 } {
+        const position = self.positions.items[index];
+        const remaining_duration: f32 = self.remaining_duration.items[index];
+        const damage: i32 = self.damage.items[index];
+        const max_size: f32 = self.max_size.items[index];
+
+        const radius = max_size - max_size / remaining_duration; // remove_spent prevents div by 0; the formula should match the speread in the related fragment shader
+
+        return .{ damage, position, radius };
     }
 };

@@ -11,6 +11,10 @@ pub const explosion_fragment = @embedFile("shaders/explosion.frag");
 const triangle_vertices = [_]f32{ -0.1, -0.1, 0.0, 0.1, -0.1, 0.0, 0.0, 0.1, 0.0 };
 const triangle_uvs = [_]f32{ 0.0, 0.0, 1.0, 0.0, 0.5, 1.0 };
 
+// -+2 ++X
+// --0 +-1
+// -+2 ++1
+// --X +-0
 const cube_vertices = [_]f32{
     -0.1, -0.1, 0.0,
     0.1,  -0.1, 0.0,
@@ -142,6 +146,7 @@ pub const RenderableEffect = struct {
             .buffer_descriptors = owned_buffer_descriptors,
         };
     }
+
     pub fn add(self: *RenderableEffect, buffer_index: usize, content: []const f32) !void {
         try self.buffer_contents.items[buffer_index].appendSlice(content);
     }
@@ -152,7 +157,8 @@ pub const RenderableEffect = struct {
         }
     }
 
-    pub fn renderInstanced(self: *RenderableEffect, program: *const RenderProgram) void {
+    // refactor to not use vertex coutn as a parameter
+    pub fn render_instanced(self: *RenderableEffect, program: *const RenderProgram, vertex_count: c_int) void {
         program.use();
         gl.Enable(gl.BLEND);
         gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -162,7 +168,7 @@ pub const RenderableEffect = struct {
             const offsets_len: isize = @intCast(bc.items.len);
             gl.BindBuffer(gl.ARRAY_BUFFER, b);
             gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * offsets_len, (bc.items.ptr), gl.STATIC_DRAW);
-            gl.DrawArraysInstanced(gl.TRIANGLES, 0, 3, @intCast(bc.items.len / bd.size_per_element)); // the divisor should depend on the buffer descriptor
+            gl.DrawArraysInstanced(gl.TRIANGLES, 0, vertex_count, @intCast(bc.items.len / bd.size_per_element)); // the divisor should depend on the buffer descriptor
         }
     }
 
