@@ -45,7 +45,7 @@ pub const World = struct {
         const ghost_buffer_descriptor = render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 };
         const ghost_effect = try render.RenderableEffect.init(allocator, &[_]render.BufferDescriptor{ghost_buffer_descriptor});
 
-        var explosions = spells.ExplosionSpell.init(allocator);
+        const explosions = spells.ExplosionSpell.init(allocator);
         const explosions_program = try render.RenderProgram.init(render.explosion_vertex, render.explosion_fragment);
         const explosion_buffer_descriptors = [_]render.BufferDescriptor{
             render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }, // positions
@@ -53,8 +53,6 @@ pub const World = struct {
             render.BufferDescriptor{ .size_per_element = 1, .stride = @sizeOf(f32) }, // remaining_duration
         };
         const explosions_effect = try render.RenderableEffect.init_cube(allocator, &explosion_buffer_descriptors);
-
-        try explosions.add(Vec2{ .x = 0.0, .y = 0.0 }); // replace with the spell system later
 
         var prng = std.rand.DefaultPrng.init(blk: {
             var seed: u64 = undefined;
@@ -139,6 +137,9 @@ pub const World = struct {
         self.ghosts.remove_dead_enemies();
         self.pumpkins.remove_spent_spells(self.time_delta_seconds);
 
+        self.explosions.remove_spent(self.time_delta_seconds);
+        try self.spawn_explosion();
+
         try self.render_pumpkins();
 
         try self.render_ghosts();
@@ -146,6 +147,21 @@ pub const World = struct {
         try self.render_explosions();
 
         self.fps_system(last_frame_duration);
+    }
+
+    fn spawn_explosion(self: *World) !void {
+        if (self.rand.float(f32) < 0.2) {
+            const p = self.random_position(-1.0, 1.0, -1.0, 1.0);
+            try self.explosions.add(p); // replace with the spell system later
+        }
+    }
+
+    fn random_position(self: *World, x_min: f32, x_max: f32, y_min: f32, y_max: f32) Vec2 {
+        const x = self.rand.float(f32) * (x_max - x_min) + x_min;
+        const y = self.rand.float(f32) * (y_max - y_min) + y_min;
+
+        const v = Vec2{ .x = x, .y = y };
+        return v;
     }
 
     fn render_ghosts(self: *World) !void {

@@ -96,6 +96,7 @@ pub const ExplosionSpell = struct {
     pub fn deinit(self: *ExplosionSpell) void {
         self.positions.deinit();
         self.damage.deinit();
+        self.max_size.deinit();
         self.remaining_duration.deinit();
     }
 
@@ -109,6 +110,7 @@ pub const ExplosionSpell = struct {
                 _ = self.positions.orderedRemove(i);
                 _ = self.damage.orderedRemove(i);
                 _ = self.remaining_duration.orderedRemove(i);
+                _ = self.max_size.orderedRemove(i);
             }
         }
     }
@@ -117,7 +119,7 @@ pub const ExplosionSpell = struct {
         try self.positions.append(position);
         try self.damage.append(1);
         try self.max_size.append(1.0);
-        try self.remaining_duration.append(10.0);
+        try self.remaining_duration.append(1.0);
     }
 
     // returning damgage, center, radius;
