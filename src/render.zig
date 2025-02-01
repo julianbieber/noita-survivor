@@ -5,18 +5,47 @@ pub const ghost_vertex = @embedFile("shaders/ghost.vert");
 pub const ghost_fragment = @embedFile("shaders/ghost.frag");
 pub const pumpkin_vertex = @embedFile("shaders/pumpkin.vert");
 pub const pumpkin_fragment = @embedFile("shaders/pumpkin.frag");
+pub const explosion_vertex = @embedFile("shaders/explosion.vert");
+pub const explosion_fragment = @embedFile("shaders/explosion.frag");
 
 const triangle_vertices = [_]f32{ -0.1, -0.1, 0.0, 0.1, -0.1, 0.0, 0.0, 0.1, 0.0 };
 const triangle_uvs = [_]f32{ 0.0, 0.0, 1.0, 0.0, 0.5, 1.0 };
+
+// -+2 ++X
+// --0 +-1
+// -+2 ++1
+// --X +-0
+const cube_vertices = [_]f32{
+    -0.1, -0.1, 0.0,
+    0.1,  -0.1, 0.0,
+    -0.1, 0.1,  0.0,
+    0.1,  -0.1, 0.0,
+    0.1,  0.1,  0.0,
+    -0.1, 0.1,  0.0,
+};
+const cube_uvs = [_]f32{
+    0.0, 0.0,
+    1.0, 0.0,
+    0.0, 1.0,
+    1.0, 0.0,
+    1.0, 1.0,
+    0.0, 1.0,
+};
+
+pub const BufferDescriptor = struct {
+    size_per_element: usize,
+    stride: usize,
+};
 
 pub const RenderableEffect = struct {
     vertex_array: c_uint,
     vertex_buffer: c_uint,
     uv_buffer: c_uint,
-    offset_buffer: c_uint,
-    offsets: std.ArrayList(f32),
+    buffers: std.ArrayList(c_uint),
+    buffer_contents: std.ArrayList(std.ArrayList(f32)),
+    buffer_descriptors: std.ArrayList(BufferDescriptor),
 
-    pub fn init(allocator: std.mem.Allocator) !RenderableEffect {
+    pub fn init(allocator: std.mem.Allocator, buffer_descriptors: []const BufferDescriptor) !RenderableEffect {
         var vbo: c_uint = undefined;
         var vao: c_uint = undefined;
 
@@ -40,50 +69,124 @@ pub const RenderableEffect = struct {
         gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 0, 0);
         gl.EnableVertexAttribArray(1);
 
-        const offsets = try std.ArrayList(f32).initCapacity(allocator, 400); // cap to 200 effects per type to avoid reallocation
+        var buffers = std.ArrayList(c_uint).init(allocator);
+        var buffer_contents = std.ArrayList(std.ArrayList(f32)).init(allocator);
+        for (buffer_descriptors, 2..) |bc, i| {
+            var b: c_uint = undefined;
 
-        var offset_buffer: c_uint = undefined;
-        gl.GenBuffers(1, @ptrCast(&offset_buffer));
-        gl.BindBuffer(gl.ARRAY_BUFFER, offset_buffer);
-        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), 0);
-        gl.VertexAttribDivisor(2, 1);
-        gl.EnableVertexAttribArray(2);
+            gl.GenBuffers(1, @ptrCast(&b));
+            gl.BindBuffer(gl.ARRAY_BUFFER, b);
+            gl.VertexAttribPointer(@intCast(i), @intCast(bc.size_per_element), gl.FLOAT, gl.FALSE, @intCast(bc.stride), 0);
+            gl.VertexAttribDivisor(@intCast(i), 1);
+            gl.EnableVertexAttribArray(@intCast(i));
+            try buffers.append(b);
+            try buffer_contents.append(std.ArrayList(f32).init(allocator));
+        }
+
+        var owned_buffer_descriptors = std.ArrayList(BufferDescriptor).init(allocator);
+        try owned_buffer_descriptors.appendSlice(buffer_descriptors);
 
         return RenderableEffect{
             .vertex_array = vao,
             .vertex_buffer = vbo,
             .uv_buffer = uv_buffer,
-            .offset_buffer = offset_buffer,
-            .offsets = offsets,
+            .buffers = buffers,
+            .buffer_contents = buffer_contents,
+            .buffer_descriptors = owned_buffer_descriptors,
         };
     }
 
-    pub fn add(self: *RenderableEffect, x: f32, y: f32) !void {
-        try self.offsets.append(x);
-        try self.offsets.append(y);
+    pub fn init_cube(allocator: std.mem.Allocator, buffer_descriptors: []const BufferDescriptor) !RenderableEffect {
+        var vbo: c_uint = undefined;
+        var vao: c_uint = undefined;
+
+        gl.GenVertexArrays(1, @ptrCast(&vao));
+
+        gl.GenBuffers(1, @ptrCast(&vbo));
+
+        gl.BindVertexArray(vao);
+        gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
+        const vertices_len: isize = @intCast(cube_vertices.len);
+        gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * vertices_len, @ptrCast(&cube_vertices), gl.STATIC_DRAW);
+        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), 0);
+        gl.EnableVertexAttribArray(0);
+
+        var uv_buffer: c_uint = undefined;
+        gl.GenBuffers(1, @ptrCast(&uv_buffer));
+        gl.BindBuffer(gl.ARRAY_BUFFER, uv_buffer);
+
+        const uv_len: isize = @intCast(cube_uvs.len);
+        gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * uv_len, @ptrCast(&cube_uvs), gl.STATIC_DRAW);
+        gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 0, 0);
+        gl.EnableVertexAttribArray(1);
+
+        var buffers = std.ArrayList(c_uint).init(allocator);
+        var buffer_contents = std.ArrayList(std.ArrayList(f32)).init(allocator);
+        for (buffer_descriptors, 2..) |bc, i| {
+            var b: c_uint = undefined;
+
+            gl.GenBuffers(1, @ptrCast(&b));
+            gl.BindBuffer(gl.ARRAY_BUFFER, b);
+            gl.VertexAttribPointer(@intCast(i), @intCast(bc.size_per_element), gl.FLOAT, gl.FALSE, @intCast(bc.stride), 0);
+            gl.VertexAttribDivisor(@intCast(i), 1);
+            gl.EnableVertexAttribArray(@intCast(i));
+            try buffers.append(b);
+            try buffer_contents.append(std.ArrayList(f32).init(allocator));
+        }
+
+        var owned_buffer_descriptors = std.ArrayList(BufferDescriptor).init(allocator);
+        try owned_buffer_descriptors.appendSlice(buffer_descriptors);
+
+        return RenderableEffect{
+            .vertex_array = vao,
+            .vertex_buffer = vbo,
+            .uv_buffer = uv_buffer,
+            .buffers = buffers,
+            .buffer_contents = buffer_contents,
+            .buffer_descriptors = owned_buffer_descriptors,
+        };
+    }
+
+    pub fn add(self: *RenderableEffect, buffer_index: usize, content: []const f32) !void {
+        try self.buffer_contents.items[buffer_index].appendSlice(content);
     }
 
     pub fn clear(self: *RenderableEffect) void {
-        self.offsets.clearRetainingCapacity();
+        for (self.buffer_contents.items) |*bc| {
+            bc.clearRetainingCapacity();
+        }
     }
 
-    pub fn renderInstanced(self: *RenderableEffect, program: *const RenderProgram) void {
+    // refactor to not use vertex coutn as a parameter
+    pub fn render_instanced(self: *RenderableEffect, program: *const RenderProgram, vertex_count: c_int) void {
         program.use();
         gl.Enable(gl.BLEND);
         gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.BindVertexArray(self.vertex_array);
-        const offsets_len: isize = @intCast(self.offsets.items.len);
-        gl.BindBuffer(gl.ARRAY_BUFFER, self.offset_buffer);
-        gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * offsets_len, (self.offsets.items.ptr), gl.STATIC_DRAW);
-        gl.DrawArraysInstanced(gl.TRIANGLES, 0, 3, @intCast(self.offsets.items.len / 2));
+
+        for (self.buffers.items, self.buffer_contents.items, self.buffer_descriptors.items) |b, bc, bd| {
+            const offsets_len: isize = @intCast(bc.items.len);
+            gl.BindBuffer(gl.ARRAY_BUFFER, b);
+            gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * offsets_len, (bc.items.ptr), gl.STATIC_DRAW);
+            gl.DrawArraysInstanced(gl.TRIANGLES, 0, vertex_count, @intCast(bc.items.len / bd.size_per_element)); // the divisor should depend on the buffer descriptor
+        }
     }
 
     pub fn deinit(self: *RenderableEffect) void {
-        self.offsets.deinit();
         gl.DeleteVertexArrays(1, @ptrCast(&self.vertex_array));
         gl.DeleteBuffers(1, @ptrCast(&self.vertex_buffer));
-        gl.DeleteBuffers(1, @ptrCast(&self.offset_buffer));
         gl.DeleteBuffers(1, @ptrCast(&self.uv_buffer));
+        for (self.buffers.items) |*b| {
+            gl.DeleteBuffers(1, @ptrCast(b));
+        }
+        self.buffers.deinit();
+
+        for (self.buffer_contents.items) |bc| {
+            bc.deinit();
+        }
+
+        self.buffer_contents.deinit();
+        self.buffer_descriptors.deinit();
     }
 };
 
