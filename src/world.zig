@@ -68,6 +68,13 @@ pub const World = struct {
                 return error.FailedToAddSpell;
             }
         }
+        const on_hit_tree = try spell_craft.SpellTree.init(spell_craft.Spells.explosion, allocator);
+        {
+            const added = try tree.add(spell_craft.Spells{ .on_hit = try on_hit_tree.to_heap() });
+            if (!added) {
+                return error.FailedToAddSpell;
+            }
+        }
         const added = try tree.add(spell_craft.Spells.pumpkin);
         if (!added) {
             return error.FailedToAddSpell;
@@ -138,7 +145,6 @@ pub const World = struct {
         self.pumpkins.remove_spent_spells(self.time_delta_seconds);
 
         self.explosions.remove_spent(self.time_delta_seconds);
-        try self.spawn_explosion();
 
         try self.render_pumpkins();
 
@@ -147,13 +153,6 @@ pub const World = struct {
         try self.render_explosions();
 
         self.fps_system(last_frame_duration);
-    }
-
-    fn spawn_explosion(self: *World) !void {
-        if (self.rand.float(f32) < 0.2) {
-            const p = self.random_position(-1.0, 1.0, -1.0, 1.0);
-            try self.explosions.add(p); // replace with the spell system later
-        }
     }
 
     fn random_position(self: *World, x_min: f32, x_max: f32, y_min: f32, y_max: f32) Vec2 {
@@ -197,9 +196,18 @@ pub const World = struct {
         for (self.player_current_spell.items) |*spell| {
             const cast = spell.advance_time(self.time_delta_seconds);
             if (cast) {
-                std.debug.print("{d}projectiles\n", .{spell.projectiles});
-                for (0..spell.projectiles) |_| {
-                    try self.pumpkins.add(self.player_position);
+                std.debug.print("{d}projectiles\n", .{spell.repetitions});
+                for (0..spell.repetitions) |_| {
+                    switch (spell.own_type) {
+                        .multi_cast => {},
+                        .pumpkin => {
+                            try self.pumpkins.add(self.player_position);
+                        },
+                        .on_hit => {},
+                        .explosion => {
+                            try self.explosions.add(self.player_position);
+                        },
+                    }
                 }
             }
         }
