@@ -4,6 +4,7 @@ const std = @import("std");
 const Vec2 = @import("vec.zig").Vec2;
 const enemy = @import("enemy.zig");
 const spell_craft = @import("spell_craft.zig");
+const SpellEval = spell_craft.SpellEval;
 
 // Structure for systems: if it requires multiple different entities, place the system in the world, otherwise place it directly in the entity
 
@@ -140,7 +141,7 @@ pub const World = struct {
         self.pumpkins.simulate(self.time_delta_seconds);
 
         try self.ghosts.enemies_system(self.player_position, self.time_delta_seconds);
-        self.spell_hit_system();
+        try self.spell_hit_system();
         self.ghosts.remove_dead_enemies();
         self.pumpkins.remove_spent_spells(self.time_delta_seconds);
 
@@ -196,23 +197,26 @@ pub const World = struct {
         for (self.player_current_spell.items) |*spell| {
             const cast = spell.advance_time(self.time_delta_seconds);
             if (cast) {
-                std.debug.print("{d}projectiles\n", .{spell.repetitions});
-                for (0..spell.repetitions) |_| {
-                    switch (spell.own_type) {
-                        .multi_cast => {},
-                        .pumpkin => {
-                            try self.pumpkins.add(self.player_position);
-                        },
-                        .on_hit => {},
-                        .explosion => {
-                            try self.explosions.add(self.player_position);
-                        },
-                    }
-                }
+                try apply_single_spell_eval(self, spell);
             }
         }
     }
 
+    fn apply_single_spell_eval(self: *World, spell: *SpellEval) !void {
+        std.debug.print("{d}projectiles\n", .{spell.repetitions});
+        for (0..spell.repetitions) |_| {
+            switch (spell.own_type) {
+                .multi_cast => {},
+                .pumpkin => {
+                    try self.pumpkins.add(self.player_position, spell);
+                },
+                .on_hit => {},
+                .explosion => {
+                    try self.explosions.add(self.player_position, spell);
+                },
+            }
+        }
+    }
     fn fps_system(self: *World, last_frame_duration: i64) void {
         self.duration_since_second += last_frame_duration;
         if (self.duration_since_second >= 1000) {
@@ -224,12 +228,15 @@ pub const World = struct {
         }
     }
 
-    fn spell_hit_system(self: *World) void {
+    fn spell_hit_system(self: *World) !void {
         for (self.pumpkins.positions.items, 0..) |spell_position, spell_i| {
             for (self.ghosts.positions.items, 0..) |enemy_position, enemey_yi| {
                 if (enemy_position.dist(spell_position) < 0.1) {
                     self.pumpkins.remaining_hits.items[spell_i] -= 1;
                     self.ghosts.healths.items[enemey_yi] -= 1;
+                    if (self.pumpkins.cast_by.items[enemey_yi]) |c| {
+                        try self.apply_single_spell_eval(c);
+                    }
                 }
             }
         }
