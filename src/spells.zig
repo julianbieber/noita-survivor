@@ -9,7 +9,7 @@ pub const PumpkinSpell = struct {
     directions: std.ArrayList(Vec2),
     remaining_hits: std.ArrayList(i32),
     remaining_duration: std.ArrayList(f32),
-    cast_by: std.ArrayList(?*SpellEval), // Does not own the SpellEval, does not free it on deinint
+    cast_by: std.ArrayList(?*const SpellEval), // Does not own the SpellEval, does not free it on deinint
     current_angle: f32,
 
     pub fn init(allocator: std.mem.Allocator) !PumpkinSpell {
@@ -17,7 +17,7 @@ pub const PumpkinSpell = struct {
         const directions = try std.ArrayList(Vec2).initCapacity(allocator, 200);
         const remaining_hits = try std.ArrayList(i32).initCapacity(allocator, 200);
         const remaining_duration = try std.ArrayList(f32).initCapacity(allocator, 200);
-        const cast_by = try std.ArrayList(?*SpellEval).initCapacity(allocator, 200);
+        const cast_by = try std.ArrayList(?*const SpellEval).initCapacity(allocator, 200);
 
         return PumpkinSpell{
             .positions = positions,
@@ -65,7 +65,7 @@ pub const PumpkinSpell = struct {
         }
     }
 
-    pub fn add(self: *PumpkinSpell, initial_pos: Vec2, cast_by: ?*SpellEval) !void {
+    pub fn add(self: *PumpkinSpell, initial_pos: Vec2, cast_by: ?*const SpellEval) !void {
         const radians = self.current_angle;
         const x = math.cos(radians);
         const y = math.sin(radians);
@@ -85,7 +85,7 @@ pub const ExplosionSpell = struct {
     damage: std.ArrayList(i32),
     max_size: std.ArrayList(f32),
     remaining_duration: std.ArrayList(f32),
-    cast_by: std.ArrayList(?*SpellEval),
+    cast_by: std.ArrayList(?*const SpellEval),
 
     pub fn init(allocator: std.mem.Allocator) ExplosionSpell {
         const positions = std.ArrayList(Vec2).init(allocator);
@@ -93,7 +93,7 @@ pub const ExplosionSpell = struct {
         const damage = std.ArrayList(i32).init(allocator);
         const max_size = std.ArrayList(f32).init(allocator);
         const remaining_duration = std.ArrayList(f32).init(allocator);
-        const cast_by = std.ArrayList(?*SpellEval).init(allocator);
+        const cast_by = std.ArrayList(?*const SpellEval).init(allocator);
 
         return ExplosionSpell{
             .positions = positions,
@@ -128,9 +128,9 @@ pub const ExplosionSpell = struct {
         }
     }
 
-    pub fn add(self: *ExplosionSpell, position: Vec2, cast_by: ?*SpellEval) !void {
+    pub fn add(self: *ExplosionSpell, position: Vec2, cast_by: ?*const SpellEval) !void {
         try self.positions.append(position);
-        try self.damage.append(1);
+        try self.damage.append(10);
         try self.max_size.append(1.0);
         try self.remaining_duration.append(1.0);
         try self.cast_by.append(cast_by);
