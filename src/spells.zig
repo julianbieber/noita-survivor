@@ -2,12 +2,14 @@ const render = @import("render.zig");
 const std = @import("std");
 const math = std.math;
 const Vec2 = @import("vec.zig").Vec2;
+const SpellEval = @import("spell_craft.zig").SpellEval;
 
 pub const PumpkinSpell = struct {
     positions: std.ArrayList(Vec2),
     directions: std.ArrayList(Vec2),
     remaining_hits: std.ArrayList(i32),
     remaining_duration: std.ArrayList(f32),
+    cast_by: std.ArrayList(?*const SpellEval), // Does not own the SpellEval, does not free it on deinint
     current_angle: f32,
 
     pub fn init(allocator: std.mem.Allocator) !PumpkinSpell {
@@ -15,12 +17,14 @@ pub const PumpkinSpell = struct {
         const directions = try std.ArrayList(Vec2).initCapacity(allocator, 200);
         const remaining_hits = try std.ArrayList(i32).initCapacity(allocator, 200);
         const remaining_duration = try std.ArrayList(f32).initCapacity(allocator, 200);
+        const cast_by = try std.ArrayList(?*const SpellEval).initCapacity(allocator, 200);
 
         return PumpkinSpell{
             .positions = positions,
             .directions = directions,
             .remaining_hits = remaining_hits,
             .remaining_duration = remaining_duration,
+            .cast_by = cast_by,
 
             .current_angle = 0.0,
         };
@@ -31,6 +35,7 @@ pub const PumpkinSpell = struct {
         self.directions.deinit();
         self.remaining_hits.deinit();
         self.remaining_duration.deinit();
+        self.cast_by.deinit();
     }
 
     pub fn remove_spent_spells(self: *PumpkinSpell, time: f32) void {
@@ -45,6 +50,7 @@ pub const PumpkinSpell = struct {
                 _ = self.directions.orderedRemove(i);
                 _ = self.remaining_hits.orderedRemove(i);
                 _ = self.remaining_duration.orderedRemove(i);
+                _ = self.cast_by.orderedRemove(i);
             }
         }
     }
@@ -59,7 +65,7 @@ pub const PumpkinSpell = struct {
         }
     }
 
-    pub fn add(self: *PumpkinSpell, initial_pos: Vec2) !void {
+    pub fn add(self: *PumpkinSpell, initial_pos: Vec2, cast_by: ?*const SpellEval) !void {
         const radians = self.current_angle;
         const x = math.cos(radians);
         const y = math.sin(radians);
@@ -68,6 +74,8 @@ pub const PumpkinSpell = struct {
         try self.directions.append(Vec2{ .x = y, .y = x });
         try self.remaining_hits.append(2);
         try self.remaining_duration.append(1.0);
+        try self.cast_by.append(cast_by);
+
         self.current_angle += 0.1;
     }
 };
@@ -77,6 +85,7 @@ pub const ExplosionSpell = struct {
     damage: std.ArrayList(i32),
     max_size: std.ArrayList(f32),
     remaining_duration: std.ArrayList(f32),
+    cast_by: std.ArrayList(?*const SpellEval),
 
     pub fn init(allocator: std.mem.Allocator) ExplosionSpell {
         const positions = std.ArrayList(Vec2).init(allocator);
@@ -84,12 +93,14 @@ pub const ExplosionSpell = struct {
         const damage = std.ArrayList(i32).init(allocator);
         const max_size = std.ArrayList(f32).init(allocator);
         const remaining_duration = std.ArrayList(f32).init(allocator);
+        const cast_by = std.ArrayList(?*const SpellEval).init(allocator);
 
         return ExplosionSpell{
             .positions = positions,
             .damage = damage,
             .remaining_duration = remaining_duration,
             .max_size = max_size,
+            .cast_by = cast_by,
         };
     }
 
@@ -98,6 +109,7 @@ pub const ExplosionSpell = struct {
         self.damage.deinit();
         self.max_size.deinit();
         self.remaining_duration.deinit();
+        self.cast_by.deinit();
     }
 
     pub fn remove_spent(self: *ExplosionSpell, time_delta: f32) void {
@@ -111,15 +123,17 @@ pub const ExplosionSpell = struct {
                 _ = self.damage.orderedRemove(i);
                 _ = self.remaining_duration.orderedRemove(i);
                 _ = self.max_size.orderedRemove(i);
+                _ = self.cast_by.orderedRemove(i);
             }
         }
     }
 
-    pub fn add(self: *ExplosionSpell, position: Vec2) !void {
+    pub fn add(self: *ExplosionSpell, position: Vec2, cast_by: ?*const SpellEval) !void {
         try self.positions.append(position);
-        try self.damage.append(1);
+        try self.damage.append(10);
         try self.max_size.append(1.0);
         try self.remaining_duration.append(1.0);
+        try self.cast_by.append(cast_by);
     }
 
     // returning damgage, center, radius;
