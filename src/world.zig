@@ -125,6 +125,9 @@ pub const World = struct {
         self.ghost_effect.deinit();
 
         self.player_spell_tree.deinit();
+        for (self.player_current_spell.items) |s| {
+            s.deinit();
+        }
         self.player_current_spell.deinit();
     }
 
@@ -197,22 +200,22 @@ pub const World = struct {
         for (self.player_current_spell.items) |*spell| {
             const cast = spell.advance_time(self.time_delta_seconds);
             if (cast) {
-                try apply_single_spell_eval(self, spell);
+                try apply_single_spell_eval(self, spell, self.player_position);
             }
         }
     }
 
-    fn apply_single_spell_eval(self: *World, spell: *SpellEval) !void {
+    fn apply_single_spell_eval(self: *World, spell: *const SpellEval, at: Vec2) !void {
         std.debug.print("{d}projectiles\n", .{spell.repetitions});
         for (0..spell.repetitions) |_| {
             switch (spell.own_type) {
                 .multi_cast => {},
                 .pumpkin => {
-                    try self.pumpkins.add(self.player_position, spell);
+                    try self.pumpkins.add(at, spell);
                 },
                 .on_hit => {},
                 .explosion => {
-                    try self.explosions.add(self.player_position, spell);
+                    try self.explosions.add(at, spell);
                 },
             }
         }
@@ -234,8 +237,10 @@ pub const World = struct {
                 if (enemy_position.dist(spell_position) < 0.1) {
                     self.pumpkins.remaining_hits.items[spell_i] -= 1;
                     self.ghosts.healths.items[enemey_yi] -= 1;
-                    if (self.pumpkins.cast_by.items[enemey_yi]) |c| {
-                        try self.apply_single_spell_eval(c);
+                    if (self.pumpkins.cast_by.items[spell_i]) |c| {
+                        for (c.on_hit_spell.items) |on_hit| {
+                            try self.apply_single_spell_eval(&on_hit, spell_position);
+                        }
                     }
                 }
             }
@@ -247,6 +252,12 @@ pub const World = struct {
             for (self.ghosts.positions.items, 0..) |enemy_position, enemy_i| {
                 if (enemy_position.dist(explosion_effect[1]) < explosion_effect[2]) {
                     self.ghosts.healths.items[enemy_i] -= explosion_effect[0];
+
+                    if (self.explosions.cast_by.items[explosion_index]) |c| {
+                        for (c.on_hit_spell.items) |on_hit| {
+                            try self.apply_single_spell_eval(&on_hit, explosion_effect[1]);
+                        }
+                    }
                 }
             }
         }
