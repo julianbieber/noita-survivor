@@ -206,7 +206,7 @@ pub const World = struct {
     }
 
     fn apply_single_spell_eval(self: *World, spell: *const SpellEval, at: Vec2) !void {
-        std.debug.print("{d}projectiles\n", .{spell.repetitions});
+        // std.debug.print("{d}projectiles\n", .{spell.repetitions});
         for (0..spell.repetitions) |_| {
             switch (spell.own_type) {
                 .multi_cast => {},
@@ -252,7 +252,6 @@ pub const World = struct {
             for (self.ghosts.positions.items, 0..) |enemy_position, enemy_i| {
                 if (enemy_position.dist(explosion_effect[1]) < explosion_effect[2]) {
                     self.ghosts.healths.items[enemy_i] -= explosion_effect[0];
-
                     if (self.explosions.cast_by.items[explosion_index]) |c| {
                         for (c.on_hit_spell.items) |on_hit| {
                             try self.apply_single_spell_eval(&on_hit, explosion_effect[1]);
