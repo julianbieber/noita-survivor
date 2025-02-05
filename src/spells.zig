@@ -143,8 +143,7 @@ pub const ExplosionSpell = struct {
         const damage: i32 = self.damage.items[index];
         const max_size: f32 = self.max_size.items[index];
 
-        const radius = max_size - max_size / remaining_duration; // remove_spent prevents div by 0; the formula should match the speread in the related fragment shader
-
+        const radius = max_size - max_size * remaining_duration; // remove_spent prevents div by 0; the formula should match the speread in the related fragment shader
         return .{ damage, position, radius };
     }
 };
