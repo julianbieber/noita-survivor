@@ -7,25 +7,44 @@ const spell_craft = @import("spell_craft.zig");
 const SpellEval = spell_craft.SpellEval;
 
 // Structure for systems: if it requires multiple different entities, place the system in the world, otherwise place it directly in the entity
+//
+pub fn InstancedRenderable(comptime T: type) type {
+    return struct {
+        object: T,
+        program: render.RenderProgram,
+        effect: render.RenderableEffect,
 
+        pub fn init(
+            allocator: std.mem.Allocator,
+            vertex: []const u8,
+            fragment: []const u8,
+            effect_init_fn: fn (std.mem.Allocator, []const render.BufferDescriptor) std.mem.Allocator.Error!render.RenderableEffect,
+            buffer_descriptors: []const render.BufferDescriptor,
+        ) !@This() {
+            return .{
+                .object = try T.init(allocator),
+                .program = try render.RenderProgram.init(vertex, fragment),
+                .effect = try effect_init_fn(allocator, buffer_descriptors),
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.object.deinit();
+            self.program.deinit();
+            self.effect.deinit();
+        }
+    };
+}
 pub const World = struct {
-    pumpkins: spells.PumpkinSpell,
-    pumpkin_program: render.RenderProgram,
-    pumpkin_effect: render.RenderableEffect,
+    pumpkins: InstancedRenderable(spells.PumpkinSpell),
+    ghosts: InstancedRenderable(enemy.Ghost),
+    explosions: InstancedRenderable(spells.ExplosionSpell),
 
-    ghosts: enemy.Ghost,
-    ghost_program: render.RenderProgram,
-    ghost_effect: render.RenderableEffect,
-
-    explosions: spells.ExplosionSpell,
-    explosion_program: render.RenderProgram,
-    explosion_effect: render.RenderableEffect,
-
-    last_frame_start: i64,
+    last_frame_start: i64, // group to Timing
     frames_since_second: i32,
     duration_since_second: i64,
 
-    player_position: Vec2,
+    player_position: Vec2, // group to Player
     player_spell_tree: spell_craft.SpellTree,
     player_current_spell: std.ArrayList(spell_craft.SpellEval),
 
@@ -36,24 +55,13 @@ pub const World = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !World {
-        const pumpkins = try spells.PumpkinSpell.init(allocator);
-        const pumpkin_program = try render.RenderProgram.init(render.pumpkin_vertex, render.pumpkin_fragment);
-        const pumpkin_buffer_descriptr = render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 };
-        const pumpkin_effect = try render.RenderableEffect.init(allocator, &[_]render.BufferDescriptor{pumpkin_buffer_descriptr});
-
-        const ghosts = try enemy.Ghost.init(allocator);
-        const ghost_program = try render.RenderProgram.init(render.ghost_vertex, render.ghost_fragment);
-        const ghost_buffer_descriptor = render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 };
-        const ghost_effect = try render.RenderableEffect.init(allocator, &[_]render.BufferDescriptor{ghost_buffer_descriptor});
-
-        const explosions = spells.ExplosionSpell.init(allocator);
-        const explosions_program = try render.RenderProgram.init(render.explosion_vertex, render.explosion_fragment);
-        const explosion_buffer_descriptors = [_]render.BufferDescriptor{
-            render.BufferDescriptor{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }, // positions
-            render.BufferDescriptor{ .size_per_element = 1, .stride = @sizeOf(f32) }, // max_size
-            render.BufferDescriptor{ .size_per_element = 1, .stride = @sizeOf(f32) }, // remaining_duration
-        };
-        const explosions_effect = try render.RenderableEffect.init_cube(allocator, &explosion_buffer_descriptors);
+        const pumpkins = try InstancedRenderable(spells.PumpkinSpell).init(allocator, render.pumpkin_vertex, render.pumpkin_fragment, render.RenderableEffect.init, &.{.{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }});
+        const ghosts = try InstancedRenderable(enemy.Ghost).init(allocator, render.ghost_vertex, render.ghost_fragment, render.RenderableEffect.init, &.{.{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }});
+        const explosions = try InstancedRenderable(spells.ExplosionSpell).init(allocator, render.explosion_vertex, render.explosion_fragment, render.RenderableEffect.init_cube, &.{
+            .{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 },
+            .{ .size_per_element = 1, .stride = @sizeOf(f32) },
+            .{ .size_per_element = 1, .stride = @sizeOf(f32) },
+        });
 
         var prng = std.rand.DefaultPrng.init(blk: {
             var seed: u64 = undefined;
@@ -84,16 +92,8 @@ pub const World = struct {
 
         return World{
             .pumpkins = pumpkins,
-            .pumpkin_program = pumpkin_program,
-            .pumpkin_effect = pumpkin_effect,
-
             .ghosts = ghosts,
-            .ghost_program = ghost_program,
-            .ghost_effect = ghost_effect,
-
             .explosions = explosions,
-            .explosion_program = explosions_program,
-            .explosion_effect = explosions_effect,
 
             .last_frame_start = std.time.milliTimestamp(),
             .frames_since_second = 0,
@@ -113,16 +113,10 @@ pub const World = struct {
 
     pub fn deinit(self: *World) void {
         self.pumpkins.deinit();
-        self.pumpkin_program.deinit();
-        self.pumpkin_effect.deinit();
 
         self.explosions.deinit();
-        self.explosion_program.deinit();
-        self.explosion_effect.deinit();
 
         self.ghosts.deinit();
-        self.ghost_program.deinit();
-        self.ghost_effect.deinit();
 
         self.player_spell_tree.deinit();
         for (self.player_current_spell.items) |s| {
@@ -141,14 +135,14 @@ pub const World = struct {
         self.player_position = Vec2{ .x = 0.0, .y = 0.0 };
 
         try self.eval_spells_system();
-        self.pumpkins.simulate(self.time_delta_seconds);
+        self.pumpkins.object.simulate(self.time_delta_seconds);
 
-        try self.ghosts.enemies_system(self.player_position, self.time_delta_seconds);
+        try self.ghosts.object.enemies_system(self.player_position, self.time_delta_seconds);
         try self.spell_hit_system();
-        self.ghosts.remove_dead_enemies();
-        self.pumpkins.remove_spent_spells(self.time_delta_seconds);
+        self.ghosts.object.remove_dead_enemies();
+        self.pumpkins.object.remove_spent_spells(self.time_delta_seconds);
 
-        self.explosions.remove_spent(self.time_delta_seconds);
+        self.explosions.object.remove_spent(self.time_delta_seconds);
 
         try self.render_pumpkins();
 
@@ -168,32 +162,32 @@ pub const World = struct {
     }
 
     fn render_ghosts(self: *World) !void {
-        self.ghost_effect.clear();
-        for (self.ghosts.positions.items) |pos| {
+        self.ghosts.effect.clear();
+        for (self.ghosts.object.positions.items) |pos| {
             // if (pos.len() < 2.0)
-            try self.ghost_effect.add(0, &[_]f32{ pos.x, pos.y });
+            try self.ghosts.effect.add(0, &[_]f32{ pos.x, pos.y });
         }
-        self.ghost_effect.render_instanced(&self.ghost_program, 3);
+        self.ghosts.effect.render_instanced(&self.ghosts.program, 3);
     }
 
     fn render_explosions(self: *World) !void {
-        self.explosion_effect.clear();
-        for (self.explosions.positions.items, self.explosions.max_size.items, self.explosions.remaining_duration.items) |pos, size, dur| {
+        self.explosions.effect.clear();
+        for (self.explosions.object.positions.items, self.explosions.object.max_size.items, self.explosions.object.remaining_duration.items) |pos, size, dur| {
             // if (pos.len() < 2.0)
-            try self.explosion_effect.add(0, &[_]f32{ pos.x, pos.y });
-            try self.explosion_effect.add(1, &[_]f32{size});
-            try self.explosion_effect.add(2, &[_]f32{dur});
+            try self.explosions.effect.add(0, &[_]f32{ pos.x, pos.y });
+            try self.explosions.effect.add(1, &[_]f32{size});
+            try self.explosions.effect.add(2, &[_]f32{dur});
         }
-        self.explosion_effect.render_instanced(&self.explosion_program, 6);
+        self.explosions.effect.render_instanced(&self.explosions.program, 6);
     }
 
     fn render_pumpkins(self: *World) !void {
-        self.pumpkin_effect.clear();
-        for (self.pumpkins.positions.items) |pos| {
+        self.pumpkins.effect.clear();
+        for (self.pumpkins.object.positions.items) |pos| {
             if (pos.len() < 2.0) // culling should take player position into account
-                try self.pumpkin_effect.add(0, &[_]f32{ pos.x, pos.y });
+                try self.pumpkins.effect.add(0, &[_]f32{ pos.x, pos.y });
         }
-        self.pumpkin_effect.render_instanced(&self.pumpkin_program, 3);
+        self.pumpkins.effect.render_instanced(&self.pumpkins.program, 3);
     }
 
     fn eval_spells_system(self: *World) !void {
@@ -211,15 +205,16 @@ pub const World = struct {
             switch (spell.own_type) {
                 .multi_cast => {},
                 .pumpkin => {
-                    try self.pumpkins.add(at, spell);
+                    try self.pumpkins.object.add(at, spell);
                 },
                 .on_hit => {},
                 .explosion => {
-                    try self.explosions.add(at, spell);
+                    try self.explosions.object.add(at, spell);
                 },
             }
         }
     }
+
     fn fps_system(self: *World, last_frame_duration: i64) void {
         self.duration_since_second += last_frame_duration;
         if (self.duration_since_second >= 1000) {
@@ -232,12 +227,12 @@ pub const World = struct {
     }
 
     fn spell_hit_system(self: *World) !void {
-        for (self.pumpkins.positions.items, 0..) |spell_position, spell_i| {
-            for (self.ghosts.positions.items, 0..) |enemy_position, enemey_yi| {
+        for (self.pumpkins.object.positions.items, 0..) |spell_position, spell_i| {
+            for (self.ghosts.object.positions.items, 0..) |enemy_position, enemey_yi| {
                 if (enemy_position.dist(spell_position) < 0.1) {
-                    self.pumpkins.remaining_hits.items[spell_i] -= 1;
-                    self.ghosts.healths.items[enemey_yi] -= 1;
-                    if (self.pumpkins.cast_by.items[spell_i]) |c| {
+                    self.pumpkins.object.remaining_hits.items[spell_i] -= 1;
+                    self.ghosts.object.healths.items[enemey_yi] -= 1;
+                    if (self.pumpkins.object.cast_by.items[spell_i]) |c| {
                         for (c.on_hit_spell.items) |on_hit| {
                             try self.apply_single_spell_eval(&on_hit, spell_position);
                         }
@@ -246,13 +241,13 @@ pub const World = struct {
             }
         }
 
-        for (0..self.explosions.positions.items.len) |explosion_index| {
-            const explosion_effect = self.explosions.get_damage(explosion_index);
+        for (0..self.explosions.object.positions.items.len) |explosion_index| {
+            const explosion_effect = self.explosions.object.get_damage(explosion_index);
 
-            for (self.ghosts.positions.items, 0..) |enemy_position, enemy_i| {
+            for (self.ghosts.object.positions.items, 0..) |enemy_position, enemy_i| {
                 if (enemy_position.dist(explosion_effect[1]) < explosion_effect[2]) {
-                    self.ghosts.healths.items[enemy_i] -= explosion_effect[0];
-                    if (self.explosions.cast_by.items[explosion_index]) |c| {
+                    self.ghosts.object.healths.items[enemy_i] -= explosion_effect[0];
+                    if (self.explosions.object.cast_by.items[explosion_index]) |c| {
                         for (c.on_hit_spell.items) |on_hit| {
                             try self.apply_single_spell_eval(&on_hit, explosion_effect[1]);
                         }

@@ -87,7 +87,7 @@ pub const ExplosionSpell = struct {
     remaining_duration: std.ArrayList(f32),
     cast_by: std.ArrayList(?*const SpellEval),
 
-    pub fn init(allocator: std.mem.Allocator) ExplosionSpell {
+    pub fn init(allocator: std.mem.Allocator) !ExplosionSpell {
         const positions = std.ArrayList(Vec2).init(allocator);
 
         const damage = std.ArrayList(i32).init(allocator);

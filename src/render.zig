@@ -45,7 +45,7 @@ pub const RenderableEffect = struct {
     buffer_contents: std.ArrayList(std.ArrayList(f32)),
     buffer_descriptors: std.ArrayList(BufferDescriptor),
 
-    pub fn init(allocator: std.mem.Allocator, buffer_descriptors: []const BufferDescriptor) !RenderableEffect {
+    pub fn init(allocator: std.mem.Allocator, buffer_descriptors: []const BufferDescriptor) std.mem.Allocator.Error!RenderableEffect {
         var vbo: c_uint = undefined;
         var vao: c_uint = undefined;
 
@@ -96,7 +96,7 @@ pub const RenderableEffect = struct {
         };
     }
 
-    pub fn init_cube(allocator: std.mem.Allocator, buffer_descriptors: []const BufferDescriptor) !RenderableEffect {
+    pub fn init_cube(allocator: std.mem.Allocator, buffer_descriptors: []const BufferDescriptor) std.mem.Allocator.Error!RenderableEffect {
         var vbo: c_uint = undefined;
         var vao: c_uint = undefined;
 
