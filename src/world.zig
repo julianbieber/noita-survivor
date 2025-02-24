@@ -35,41 +35,29 @@ pub fn InstancedRenderable(comptime T: type) type {
         }
     };
 }
-pub const World = struct {
-    pumpkins: InstancedRenderable(spells.PumpkinSpell),
-    ghosts: InstancedRenderable(enemy.Ghost),
-    explosions: InstancedRenderable(spells.ExplosionSpell),
 
-    last_frame_start: i64, // group to Timing
+pub const Timing = struct {
+    last_frame_start: i64,
     frames_since_second: i32,
     duration_since_second: i64,
-
-    player_position: Vec2, // group to Player
-    player_spell_tree: spell_craft.SpellTree,
-    player_current_spell: std.ArrayList(spell_craft.SpellEval),
-
-    rand: std.Random,
-    prng: std.rand.Xoshiro256,
     time_delta_seconds: f32,
 
-    allocator: std.mem.Allocator,
+    fn new() Timing {
+        return Timing{
+            .last_frame_start = std.time.milliTimestamp(),
+            .frames_since_second = 0,
+            .duration_since_second = 0,
+            .time_delta_seconds = 0.0,
+        };
+    }
+};
 
-    pub fn init(allocator: std.mem.Allocator) !World {
-        const pumpkins = try InstancedRenderable(spells.PumpkinSpell).init(allocator, render.pumpkin_vertex, render.pumpkin_fragment, render.RenderableEffect.init, &.{.{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }});
-        const ghosts = try InstancedRenderable(enemy.Ghost).init(allocator, render.ghost_vertex, render.ghost_fragment, render.RenderableEffect.init, &.{.{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }});
-        const explosions = try InstancedRenderable(spells.ExplosionSpell).init(allocator, render.explosion_vertex, render.explosion_fragment, render.RenderableEffect.init_cube, &.{
-            .{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 },
-            .{ .size_per_element = 1, .stride = @sizeOf(f32) },
-            .{ .size_per_element = 1, .stride = @sizeOf(f32) },
-        });
+pub const Player = struct {
+    position: Vec2,
+    spell_tree: spell_craft.SpellTree,
+    current_spell: std.ArrayList(spell_craft.SpellEval),
 
-        var prng = std.rand.DefaultPrng.init(blk: {
-            var seed: u64 = undefined;
-            try std.posix.getrandom(std.mem.asBytes(&seed));
-            break :blk seed;
-        });
-        const rand = prng.random();
-
+    fn init(allocator: std.mem.Allocator) !Player {
         var tree = try spell_craft.SpellTree.init(spell_craft.Spells{ .multi_cast = 5 }, allocator);
         for (0..4) |_| {
             const added = try tree.add(spell_craft.Spells{ .multi_cast = 2 });
@@ -89,23 +77,67 @@ pub const World = struct {
             return error.FailedToAddSpell;
         }
         const current_spell = try tree.to_eval();
+        return Player{
+            .position = Vec2{ .x = 0.0, .y = 0.0 },
+            .spell_tree = tree,
+            .current_spell = current_spell,
+        };
+    }
+
+    fn deinit(self: *Player) void {
+        self.spell_tree.deinit();
+
+        for (self.current_spell.items) |s| {
+            s.deinit();
+        }
+        self.current_spell.deinit();
+    }
+};
+
+pub const World = struct {
+    // Rendering components
+    pumpkins: InstancedRenderable(spells.PumpkinSpell),
+    ghosts: InstancedRenderable(enemy.Ghost),
+    explosions: InstancedRenderable(spells.ExplosionSpell),
+
+    timing: Timing,
+    player: Player,
+
+    rand: std.Random,
+    prng: std.rand.Xoshiro256,
+
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) !World {
+        const pumpkins = try InstancedRenderable(spells.PumpkinSpell).init(allocator, render.pumpkin_vertex, render.pumpkin_fragment, render.RenderableEffect.init, &.{.{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }});
+        const ghosts = try InstancedRenderable(enemy.Ghost).init(allocator, render.ghost_vertex, render.ghost_fragment, render.RenderableEffect.init, &.{.{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 }});
+        const explosions = try InstancedRenderable(spells.ExplosionSpell).init(allocator, render.explosion_vertex, render.explosion_fragment, render.RenderableEffect.init_cube, &.{
+            .{ .size_per_element = 2, .stride = @sizeOf(f32) * 2 },
+            .{ .size_per_element = 1, .stride = @sizeOf(f32) },
+            .{ .size_per_element = 1, .stride = @sizeOf(f32) },
+        });
+
+        var prng = std.rand.DefaultPrng.init(blk: {
+            var seed: u64 = undefined;
+            try std.posix.getrandom(std.mem.asBytes(&seed));
+            break :blk seed;
+        });
+        const rand = prng.random();
+
+        const timing = Timing.new();
+
+        const player = try Player.init(allocator);
 
         return World{
             .pumpkins = pumpkins,
             .ghosts = ghosts,
             .explosions = explosions,
 
-            .last_frame_start = std.time.milliTimestamp(),
-            .frames_since_second = 0,
-            .duration_since_second = 0,
+            .timing = timing,
+            .player = player,
 
-            .player_position = Vec2{ .x = 0.0, .y = 0.0 },
             .rand = rand,
             .prng = prng,
-            .time_delta_seconds = 0.0,
-
-            .player_spell_tree = tree,
-            .player_current_spell = current_spell,
 
             .allocator = allocator,
         };
@@ -118,31 +150,25 @@ pub const World = struct {
 
         self.ghosts.deinit();
 
-        self.player_spell_tree.deinit();
-        for (self.player_current_spell.items) |s| {
-            s.deinit();
-        }
-        self.player_current_spell.deinit();
+        self.player.deinit();
     }
 
     pub fn frame(self: *World) !void {
         const frame_start = std.time.milliTimestamp();
-        const last_frame_duration = frame_start - self.last_frame_start;
-        self.last_frame_start = frame_start;
+        const last_frame_duration = frame_start - self.timing.last_frame_start;
+        self.timing.last_frame_start = frame_start;
         const last_frame_duration_f: f32 = @floatFromInt(last_frame_duration);
-        self.time_delta_seconds = last_frame_duration_f / 1000.0;
-
-        self.player_position = Vec2{ .x = 0.0, .y = 0.0 };
+        self.timing.time_delta_seconds = last_frame_duration_f / 1000.0;
 
         try self.eval_spells_system();
-        self.pumpkins.object.simulate(self.time_delta_seconds);
+        self.pumpkins.object.simulate(self.timing.time_delta_seconds);
 
-        try self.ghosts.object.enemies_system(self.player_position, self.time_delta_seconds);
+        try self.ghosts.object.enemies_system(self.player.position, self.timing.time_delta_seconds);
         try self.spell_hit_system();
         self.ghosts.object.remove_dead_enemies();
-        self.pumpkins.object.remove_spent_spells(self.time_delta_seconds);
+        self.pumpkins.object.remove_spent_spells(self.timing.time_delta_seconds);
 
-        self.explosions.object.remove_spent(self.time_delta_seconds);
+        self.explosions.object.remove_spent(self.timing.time_delta_seconds);
 
         try self.render_pumpkins();
 
@@ -191,10 +217,10 @@ pub const World = struct {
     }
 
     fn eval_spells_system(self: *World) !void {
-        for (self.player_current_spell.items) |*spell| {
-            const cast = spell.advance_time(self.time_delta_seconds);
+        for (self.player.current_spell.items) |*spell| {
+            const cast = spell.advance_time(self.timing.time_delta_seconds);
             if (cast) {
-                try apply_single_spell_eval(self, spell, self.player_position);
+                try apply_single_spell_eval(self, spell, self.player.position);
             }
         }
     }
@@ -216,13 +242,13 @@ pub const World = struct {
     }
 
     fn fps_system(self: *World, last_frame_duration: i64) void {
-        self.duration_since_second += last_frame_duration;
-        if (self.duration_since_second >= 1000) {
-            std.debug.print("{d}FPS\n", .{self.frames_since_second});
-            self.frames_since_second = 0;
-            self.duration_since_second = 0;
+        self.timing.duration_since_second += last_frame_duration;
+        if (self.timing.duration_since_second >= 1000) {
+            std.debug.print("{d}FPS\n", .{self.timing.frames_since_second});
+            self.timing.frames_since_second = 0;
+            self.timing.duration_since_second = 0;
         } else {
-            self.frames_since_second += 1;
+            self.timing.frames_since_second += 1;
         }
     }
 
