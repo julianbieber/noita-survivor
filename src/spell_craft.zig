@@ -24,7 +24,7 @@ pub const SpellTree = struct {
         return u;
     }
 
-    pub fn deinit(self: *SpellTree) void {
+    pub fn deinit(self: *const SpellTree) void {
         switch (self.spell) {
             .on_hit => |inner| {
                 inner.deinit();
@@ -64,7 +64,7 @@ pub const SpellTree = struct {
             .cast_time = 0.0,
             .remaining = 0.0,
             .repetitions = 0,
-            .own_type = SpellTags.multi_cast, // using an invalid start to detect errors fter building all evals
+            .own_type = SpellTags.multi_cast, // using an invalid start to detect errors after building all evals
             .on_hit_spell = std.ArrayList(SpellEval).init(self.allocator),
             .allocator = self.allocator,
         };
@@ -252,4 +252,48 @@ test "eval on hit effects" {
     defer eval.deinit();
 
     try testing.expect(eval.items.len == 1);
+}
+
+test "eval of no on hit effect" {
+    const allocator = testing.allocator;
+    var tree = try SpellTree.init(Spells{ .multi_cast = 5 }, allocator);
+    defer tree.deinit();
+    for (0..4) |_| {
+        const added = try tree.add(Spells{ .multi_cast = 2 });
+        if (!added) {
+            return error.FailedToAddSpell;
+        }
+    }
+    const on_hit_tree = try SpellTree.init(Spells.explosion, allocator);
+    on_hit_tree.deinit();
+    {
+        const added = try tree.add(Spells{ .on_hit = try on_hit_tree.to_heap() });
+        if (!added) {
+            return error.FailedToAddSpell;
+        }
+    }
+    const added = try tree.add(Spells.pumpkin);
+    if (!added) {
+        return error.FailedToAddSpell;
+    }
+    const current_spell = try tree.to_eval();
+    for (current_spell.items) |e| {
+        defer e.deinit();
+    }
+    defer current_spell.deinit();
+
+    for (current_spell.items) |spell| {
+        for (spell.on_hit_spell.items) |on_hit| {
+            try testing.expectEqual(on_hit.on_hit_spell.items.len, 0);
+        }
+    }
+}
+
+test "foo" {
+    const allocator = testing.allocator;
+
+    const list = std.ArrayList(SpellEval).init(allocator);
+    defer list.deinit();
+
+    try testing.expectEqual(0, list.items.len);
 }
