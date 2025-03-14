@@ -3,8 +3,7 @@ const render = @import("render.zig");
 const std = @import("std");
 const Vec2 = @import("vec.zig").Vec2;
 const enemy = @import("enemy.zig");
-const spell_craft = @import("spell_craft.zig");
-const SpellEval = spell_craft.SpellEval;
+const spell_craft = @import("spell_craft_v2.zig");
 
 // Structure for systems: if it requires multiple different entities, place the system in the world, otherwise place it directly in the entity
 //
