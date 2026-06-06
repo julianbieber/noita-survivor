@@ -1,4 +1,4 @@
 [tools]
 zig = "0.13"
-zls = "0.13"
+zls = "latest"
 just = "latest"
